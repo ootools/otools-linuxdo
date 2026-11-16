@@ -161,6 +161,11 @@
 
 ---
 
-## Spike 结论
+## Spike 结论（2026-11-16 实测，PASS）
 
-（Task 1 完成后回填：PASS/FAIL、可行头集合、DEFAULT_UA 实值、四组对照结果。）
+- 对照组：reqwest 0.12 + rustls（与 `crates/ot-http-client` 同 feature 集）不带 cookie → 403 `cf-mitigated: challenge`（带 Chrome UA 同样拦，TLS 指纹级）。
+- **③ cookie + 精确 UA（`Chrome/157.0.0.0` 全串）→ 200 + JSON**；复测稳定。方案 ② 前提成立。
+- **④ cookie + 错配 UA（Chrome/142）→ 403 质询**：CF 校验 cookie 与 UA **整串精确配对**，印证设置面板必须 cookie+UA 成对录入。
+- `DEFAULT_UA` 常量取 `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36`（2026-11 stable；无 cookie 时使用，有 cookie 时必须用用户 UA 覆写）。
+- 必发头集合：`Accept: application/json`、`User-Agent`（覆写或 DEFAULT_UA）、`Cookie: cf_clearance=<值>`（cookie 非空时）；代理与签发 IP 需一致（宿主走系统代理自动满足）。
+- spike 一次性工程 `otools/.spike-linuxdo-cf/` 已标注废弃；cookie 值不落任何仓库文件。
