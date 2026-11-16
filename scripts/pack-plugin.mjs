@@ -13,6 +13,11 @@
  *     否则 OTools 的正式包校验会以「正式包不能启用开发模式」拒收。
  *
  * 用法：node scripts/pack-plugin.mjs [--out dist-pack] [--version 0.6.2]
+ *       node scripts/pack-plugin.mjs --platform macos --arch arm64 [--out dist-pack]
+ * ------------------------------------------------------------------
+ * 六平台分包（packageMode=1）与 otools-fileshare 的发布形态一致：
+ * 每个平台/架构一个 .oplg（内容相同，纯前端无 native），放 dist-pack/<suffix>/
+ * 子目录，市场 payload 用 packageUrl* 指向 Release 里的这些文件。
  */
 import { deflateRawSync, crc32 } from 'node:zlib';
 import fs from 'node:fs';
@@ -20,6 +25,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { PLATFORM_TARGETS } from './platform-packages.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -133,8 +139,27 @@ function main() {
   const manifest = productionManifest(source, arg('version', source.version));
   const { version, packid } = manifest;
 
+  // 分平台/分架构包：--platform macos --arch arm64 → dist-pack/macos/<packid>-<version>-macos.oplg。
+  // 纯前端六个包内容完全相同，仍然分打出包是为了与市场其他插件的发布形态一致
+  // （platform-packages.mjs 的注释），并为将来引入平台相关资源预留协议。
+  const platformArg = arg('platform', '');
+  const archArg = arg('arch', '');
+  let variant = null;
+  if (platformArg) {
+    variant = PLATFORM_TARGETS.find(
+      (target) => target.platform === platformArg && (!archArg || target.arch === archArg),
+    );
+    if (!variant) {
+      throw new Error(
+        `未知 --platform/--arch 组合：${platformArg} ${archArg}（支持 ${PLATFORM_TARGETS.map((target) => `${target.platform}/${target.arch}`).join(', ')}）`,
+      );
+    }
+  }
+  const outputSuffix = variant ? `-${variant.suffix}` : '';
+
   const outDir = path.join(root, arg('out', 'dist-pack'));
-  fs.mkdirSync(outDir, { recursive: true });
+  const artifactDir = path.join(outDir, variant ? variant.suffix : '');
+  fs.mkdirSync(artifactDir, { recursive: true });
 
   // 1) 包内 plugin.json（生产清单，版本号与文件名一致）
   const entries = [{ name: 'plugin.json', data: Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8') }];
@@ -168,15 +193,16 @@ function main() {
     throw new Error('插件根目录必须提供 logo.svg');
   }
 
-  const output = path.join(outDir, `${packid}-${version}.oplg`);
+  const output = path.join(artifactDir, `${packid}-${version}${outputSuffix}.oplg`);
   fs.writeFileSync(output, zip(entries));
 
-  // 发布目录统一扁平结构：oplg + plugin.json + logo.svg + 摘要 + 元信息
-  fs.writeFileSync(path.join(outDir, 'plugin.json'), entries[0].data);
-  fs.copyFileSync(path.join(root, 'logo.svg'), path.join(outDir, 'logo.svg'));
+  // 发布目录统一扁平结构：oplg + plugin.json + logo.svg + 摘要 + 元信息。
+  // 分平台包放 dist-pack/<suffix>/ 子目录，与合包互不覆盖。
+  fs.writeFileSync(path.join(artifactDir, 'plugin.json'), entries[0].data);
+  fs.copyFileSync(path.join(root, 'logo.svg'), path.join(artifactDir, 'logo.svg'));
   const releaseFiles = [path.basename(output), 'plugin.json', 'logo.svg'];
-  const sums = releaseFiles.map((name) => `${createHash('sha256').update(fs.readFileSync(path.join(outDir, name))).digest('hex')}  ${name}`);
-  fs.writeFileSync(path.join(outDir, 'SHA256SUMS'), `${sums.join('\n')}\n`);
+  const sums = releaseFiles.map((name) => `${createHash('sha256').update(fs.readFileSync(path.join(artifactDir, name))).digest('hex')}  ${name}`);
+  fs.writeFileSync(path.join(artifactDir, 'SHA256SUMS'), `${sums.join('\n')}\n`);
   const meta = {
     packid,
     uuid: manifest.uuid,
@@ -185,8 +211,9 @@ function main() {
     entries: entries.length,
     totalBytes: entries.reduce((sum, item) => sum + item.data.length, 0),
     nativeLibs: [],
+    ...(variant ? { platform: variant.platform, arch: variant.arch } : {}),
   };
-  fs.writeFileSync(path.join(outDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(path.join(artifactDir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`, 'utf8');
   process.stdout.write(`${JSON.stringify(meta)}\n`);
 }
 

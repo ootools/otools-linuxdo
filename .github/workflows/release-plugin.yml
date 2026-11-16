@@ -87,24 +87,32 @@ jobs:
       - name: 构建前端产物
         run: npx vite build
 
-      - name: 打包正式插件并生成摘要
+      - name: 打包分平台/分架构插件并生成摘要
         env:
           VERSION: ${{ steps.meta.outputs.version }}
-        # 纯前端插件，没有平台相关产物：单合包（packageMode=0）即可，
-        # 六平台分包在内容完全相同的情况下只会让 Release 多出五个同质文件。
+        # 六平台分包（packageMode=1）：与 otools-fileshare/releasehub 的发布形态一致。
+        # 纯前端六个包内容相同，仍按平台出包以对齐市场协议（packageUrl* 字段）。
         run: |
-          node scripts/pack-plugin.mjs --out dist-pack --version "$VERSION"
-          node scripts/verify-plugin.mjs dist-pack
+          node scripts/pack-plugin.mjs --platform macos   --arch arm64 --out dist-pack --version "$VERSION"
+          node scripts/pack-plugin.mjs --platform macos   --arch x64   --out dist-pack --version "$VERSION"
+          node scripts/pack-plugin.mjs --platform windows --arch x64   --out dist-pack --version "$VERSION"
+          node scripts/pack-plugin.mjs --platform windows --arch arm64 --out dist-pack --version "$VERSION"
+          node scripts/pack-plugin.mjs --platform linux   --arch x64   --out dist-pack --version "$VERSION"
+          node scripts/pack-plugin.mjs --platform linux   --arch arm64 --out dist-pack --version "$VERSION"
+
+      - name: 独立验证插件包
+        run: |
+          failed=0
+          for dir in dist-pack/*/; do
+            [ -d "$dir" ] || continue
+            node scripts/verify-plugin.mjs "$dir" || failed=1
+          done
+          exit $failed
 
       - uses: actions/upload-artifact@v4
         with:
           name: oplg
-          path: |
-            dist-pack/*.oplg
-            dist-pack/plugin.json
-            dist-pack/logo.svg
-            dist-pack/SHA256SUMS
-            dist-pack/meta.json
+          path: dist-pack/
           if-no-files-found: error
           retention-days: 14
 
@@ -115,7 +123,10 @@ jobs:
           PUBLISH_ENABLED: ${{ steps.meta.outputs.publish_enabled }}
         run: |
           printf '### 插件构建完成\n- 插件：`%s`\n- 版本：`%s`\n- 允许正式发布：`%s`\n\n' "$PACKID" "$VERSION" "$PUBLISH_ENABLED" >> "$GITHUB_STEP_SUMMARY"
-          cat dist-pack/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
+          find dist-pack -name 'SHA256SUMS' | sort | while read -r sums; do
+            printf '#### %s\n' "$(dirname "$sums")"
+            cat "$sums" >> "$GITHUB_STEP_SUMMARY"
+          done
 
   publish:
     needs: build
@@ -145,7 +156,13 @@ jobs:
           path: release-assets
 
       - name: 发布前重新验证产物
-        run: node scripts/verify-plugin.mjs release-assets
+        run: |
+          failed=0
+          for dir in release-assets/*/; do
+            [ -d "$dir" ] || continue
+            node scripts/verify-plugin.mjs "$dir" || failed=1
+          done
+          exit $failed
 
       - name: 检查市场凭证配置（不发送凭证、不上架）
         if: ${{ needs.build.outputs.market_requested == 'true' }}
@@ -181,8 +198,7 @@ jobs:
               --title "LINUXDO 插件 v${RELEASE_VERSION}" \
               --notes "${{ github.event.repository.name }} v${RELEASE_VERSION}"
           fi
-          gh release upload "$RELEASE_TAG" release-assets/*.oplg release-assets/logo.svg \
-            release-assets/plugin.json release-assets/SHA256SUMS --clobber
+          gh release upload "$RELEASE_TAG" release-assets/*/*.oplg --clobber
 
       # OIDC 获取和使用在同一进程完成，秘密不经过 job outputs 或 artifact。
       - name: 授权并提交市场
@@ -198,9 +214,9 @@ jobs:
           OTOOLS_MARKET_API: ${{ vars.OTOOLS_MARKET_API || 'https://otools-api.lingyun.net/api/v1/otools/plugin/publish' }}
           RELEASE_TAG: ${{ needs.build.outputs.release_tag }}
           RELEASE_VERSION: ${{ needs.build.outputs.version }}
-          PLUGIN_MANIFEST: release-assets/plugin.json
-          # 对应单合包：上报 packageUrl 并置 packageMode=0。
-          PLATFORM_PACKAGES: "false"
+          PLUGIN_MANIFEST: release-assets/macos/plugin.json
+          # 六平台分包：上报 packageUrl* 六件并置 packageMode=1（客户端按平台优先下载，失败回退）。
+          PLATFORM_PACKAGES: '1'
         run: node scripts/publish-market.mjs
 
       - name: 发布摘要
