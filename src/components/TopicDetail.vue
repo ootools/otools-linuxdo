@@ -288,7 +288,7 @@ onUnmounted(() => {
                   <span class="reply-floor">{{ t('floor', { floor: reply.post_number }) }}</span>
                   <span v-if="reply.accepted_answer" class="accepted-chip">
                     <AppIcon name="check" :size="10" />
-                    {{ t('top') }}
+                    {{ t('acceptedAnswer') }}
                   </span>
                   <span class="reply-time" :title="absoluteTimeIso(reply.created_at)">
                     {{ relativeTimeIso(reply.created_at) }}
@@ -314,7 +314,7 @@ onUnmounted(() => {
 
           <div class="reply-footer">
             <button v-if="hasMorePosts" class="text-button" :disabled="loadingMore" @click="loadMore">
-              {{ loadingMore ? t('settingsTesting') : t('loadMore') }}
+              {{ loadingMore ? t('loading') : t('loadMore') }}
             </button>
             <span v-else-if="replies.length" class="all-shown">{{ t('allRepliesShown') }}</span>
           </div>

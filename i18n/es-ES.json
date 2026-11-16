@@ -66,5 +66,7 @@
   "settingsAbout": "Fuente de datos y límites",
   "settingsAboutBody": "Este plugin navega linux.do de forma anónima y de solo lectura: categorías, temas y respuestas provienen de la API JSON pública de Discourse. Sin inicio de sesión, sin publicar, sin responder ni ninguna operación de escritura.",
   "settingsPrivacy": "cf_clearance y el UA se guardan solo en el localStorage de este webview y pueden borrarse en cualquier momento; el plugin nunca envía tus datos a terceros.",
-  "settingsPairHint": "cf_clearance y el User-Agent deben pegarse en pareja: por separado Cloudflare los rechazará"
+  "settingsPairHint": "cf_clearance y el User-Agent deben pegarse en pareja: por separado Cloudflare los rechazará",
+  "acceptedAnswer": "Respuesta aceptada",
+  "loading": "Cargando…"
 }

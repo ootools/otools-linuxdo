@@ -165,7 +165,7 @@ const isBlocked = computed(() => props.error?.kind === 'blocked');
             </span>
             <span v-if="topic.has_accepted_answer" class="accepted-chip">
               <AppIcon name="check" :size="11" />
-              {{ t('top') }}
+              {{ t('acceptedAnswer') }}
             </span>
           </span>
           <span class="topic-side">
@@ -182,7 +182,7 @@ const isBlocked = computed(() => props.error?.kind === 'blocked');
 
         <div v-if="hasMore" class="load-more-row">
           <button class="text-button" :disabled="loading" @click="emit('load-more')">
-            {{ loading ? t('settingsTesting') : t('loadMore') }}
+            {{ loading ? t('loading') : t('loadMore') }}
           </button>
         </div>
       </div>

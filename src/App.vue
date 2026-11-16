@@ -315,7 +315,7 @@ onUnmounted(() => {
       <span class="status-source">{{ t('source') }}</span>
       <span v-if="isMock" class="mock-badge">{{ t('mockHint') }}</span>
       <span class="status-spacer" />
-      <span v-if="netBusy" class="status-busy">{{ t('settingsTesting') }}</span>
+      <span v-if="netBusy" class="status-busy">{{ t('loading') }}</span>
     </footer>
 
     <SettingsPanel :open="settingsOpen" :t="t" @close="settingsOpen = false" />

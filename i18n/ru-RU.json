@@ -66,5 +66,7 @@
   "settingsAbout": "Источник данных и границы",
   "settingsAboutBody": "Плагин анонимно и только для чтения просматривает открытый контент linux.do: категории, темы и ответы приходят из публичного Discourse JSON API. Без входа, публикации, ответов и любых операций записи.",
   "settingsPrivacy": "cf_clearance и UA хранятся только в localStorage этого webview и могут быть удалены в любой момент; плагин не отправляет ваши данные третьим лицам.",
-  "settingsPairHint": "cf_clearance и User-Agent вводятся парой: поодиночке Cloudflare отклонит запрос"
+  "settingsPairHint": "cf_clearance и User-Agent вводятся парой: поодиночке Cloudflare отклонит запрос",
+  "acceptedAnswer": "Принятый ответ",
+  "loading": "Загрузка…"
 }

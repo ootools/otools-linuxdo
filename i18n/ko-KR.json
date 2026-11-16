@@ -66,5 +66,7 @@
   "settingsAbout": "데이터 소스와 경계",
   "settingsAboutBody": "이 플러그인은 linux.do의 공개 콘텐츠를 익명·읽기 전용으로 탐색합니다: 카테고리·토픽·답글은 공개 Discourse JSON API에서 옵니다. 로그인, 글쓰기, 답글 등 쓰기 작업은 지원하지 않습니다.",
   "settingsPrivacy": "cf_clearance와 UA는 이 webview의 localStorage에만 저장되며 언제든 지울 수 있습니다. 제3자에게 데이터를 전송하지 않습니다.",
-  "settingsPairHint": "cf_clearance와 User-Agent는 한 쌍으로 입력하세요: 하나만 입력하면 Cloudflare가 거부합니다"
+  "settingsPairHint": "cf_clearance와 User-Agent는 한 쌍으로 입력하세요: 하나만 입력하면 Cloudflare가 거부합니다",
+  "acceptedAnswer": "채택된 답변",
+  "loading": "불러오는 중…"
 }

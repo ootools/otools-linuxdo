@@ -66,5 +66,7 @@
   "settingsAbout": "数据源与边界",
   "settingsAboutBody": "本插件匿名只读浏览 linux.do 的公开内容：分类、主题与回复均来自公开 Discourse JSON 接口。不支持登录、发帖、回复与任何写操作。",
   "settingsPrivacy": "cf_clearance 与 UA 只保存在本机 webview 的 localStorage，可随时清除；插件不向任何第三方发送你的数据。",
-  "settingsPairHint": "cf_clearance 与 User-Agent 需成对录入：只填一个会被 Cloudflare 拒绝"
+  "settingsPairHint": "cf_clearance 与 User-Agent 需成对录入：只填一个会被 Cloudflare 拒绝",
+  "acceptedAnswer": "已采纳答案",
+  "loading": "加载中…"
 }
