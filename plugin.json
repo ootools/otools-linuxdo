@@ -5,7 +5,7 @@
   "displayNameCN": "L 站社区",
   "developerName": "OTools",
   "summary": "匿名浏览 LINUX DO（linux.do）分类、最新、热门与精选主题及回复；被 Cloudflare 盾拦截时可用自己浏览器的 cf_clearance 自救。",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "minOtoolsVersion": "0.9.0",
   "entry": "dist/index.html",
   "devUrl": "http://127.0.0.1:6572",
