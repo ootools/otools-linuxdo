@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { credential, marketPayload, publishMarket, releaseMeta, productionManifest, releasePlan, validateAuthConfig } from './publish-market.mjs';
+import { booleanInput, credential, marketPayload, publishMarket, releaseMeta, productionManifest, releasePlan, validateAuthConfig } from './publish-market.mjs';
 const response = (data, ok = true) => ({ ok, status: ok ? 200 : 403, json: async () => data });
 test('OIDC extracts GitHub value and xycloud data.access_token within one job', async () => {
   const calls=[];
@@ -86,4 +86,13 @@ test('invalid packid, entry and version are rejected before packaging',()=>{
   assert.throws(()=>releaseMeta({packid:'../escape',version:'1.0.0'}));
   assert.throws(()=>productionManifest({packid:'a',version:'1.0.0',entry:'../outside'}));
   assert.throws(()=>productionManifest({packid:'a',version:'1.0.0'}));
+});
+test('boolean inputs accept GitHub numeric forms (1/0) used by six-platform workflows',()=>{
+  assert.equal(booleanInput('1',false),true);
+  assert.equal(booleanInput('0',true),false);
+  assert.equal(booleanInput('true',false),true);
+  assert.equal(booleanInput('false',true),false);
+  assert.equal(booleanInput(undefined,true),true);
+  assert.equal(booleanInput('',false),false);
+  assert.throws(()=>booleanInput('yes',false));
 });

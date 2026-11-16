@@ -56,10 +56,11 @@ export function productionManifest(manifest,version='') {
   }
   return result;
 }
-function booleanInput(value,fallback) {
+/** 工作流布尔输入：'true'/'false' 与 '1'/'0' 都认（GitHub 表单与手写 yml 两种写法）。 */
+export function booleanInput(value,fallback) {
   if (value===undefined || value==='') return fallback;
-  if (value===true || value==='true') return true;
-  if (value===false || value==='false') return false;
+  if (value===true || value==='true' || value==='1') return true;
+  if (value===false || value==='false' || value==='0') return false;
   throw new Error('发布开关必须为 true 或 false');
 }
 /** 工作流直接使用这些输出控制写操作，dry-run 不能创建 Release 或提交市场。 */
