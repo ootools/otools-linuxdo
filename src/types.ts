@@ -109,6 +109,7 @@ export interface TopicDetail {
   title: string;
   slug: string;
   posts_count: number;
+  reply_count: number;
   category_id: number;
   like_count?: number;
   views: number;
@@ -147,4 +148,15 @@ export interface CategoriesEnvelope {
     can_create_topic?: boolean;
     categories: (Category & { subcategory_list?: Category[] })[];
   };
+}
+
+/** 列表路由类型（api.ts 重导出，供 UI 装配使用）。 */
+export type ListKind = 'latest' | 'hot' | 'top' | 'cat';
+export type TopPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'all';
+
+export interface ListSource {
+  kind: ListKind;
+  categoryId?: number;
+  slug?: string;
+  period?: TopPeriod;
 }

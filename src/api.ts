@@ -3,7 +3,18 @@ import { invoke, isOtoolsPluginRuntime } from 'otools-plugin-sdk/runtime';
 import { readCache, writeCache } from './cache';
 import { getClearance, markBlocked } from './clearance';
 import { isChallengeBlocked } from './cf';
-import type { CategoriesEnvelope, Category, DiscourseUser, Topic, TopicDetail, TopicListEnvelope } from './types';
+import type {
+  CategoriesEnvelope,
+  Category,
+  DiscourseUser,
+  ListKind,
+  Topic,
+  TopicDetail,
+  TopicListEnvelope,
+  TopPeriod,
+} from './types';
+
+export type { ListKind, TopPeriod } from './types';
 
 /**
  * linux.do 公开 Discourse JSON 客户端（匿名只读）。
@@ -54,9 +65,6 @@ export class LinuxdoApiError extends Error {
 
 /** 有真实网络请求在飞（不含缓存命中），状态栏显示「请求中」。 */
 export const netBusy = ref(false);
-
-export type ListKind = 'latest' | 'hot' | 'top' | 'cat';
-export type TopPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'all';
 
 export interface TopicPage {
   topics: Topic[];
