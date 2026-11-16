@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- 原创：暗色圆底 + 白色 L 字符 + 青色点缀（不使用 linux.do 官方图形资源） -->
+  <defs>
+    <clipPath id="disc">
+      <circle cx="64" cy="64" r="56"/>
+    </clipPath>
+  </defs>
+  <circle cx="64" cy="64" r="56" fill="#1c1c1e"/>
+  <g clip-path="url(#disc)">
+    <rect x="8" y="8" width="112" height="34" fill="#2a2a2e"/>
+    <circle cx="98" cy="94" r="26" fill="#32c3c3" opacity="0.28"/>
+    <circle cx="30" cy="98" r="14" fill="#32c3c3" opacity="0.16"/>
+  </g>
+  <path d="M44 34 h14 v46 h26 v14 H44 Z" fill="#f5f5f7"/>
+</svg>

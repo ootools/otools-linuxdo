@@ -1,0 +1,33 @@
+{
+  "name": "otools-linuxdo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A standalone OTools plugin: browse LINUX DO (linux.do, Discourse) categories, topics and replies anonymously via the public JSON API.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 6572 --strictPort",
+    "build": "vue-tsc --noEmit && vite build",
+    "typecheck": "vue-tsc --noEmit --pretty false",
+    "preview": "node scripts/serve-dist.mjs 6573",
+    "pack": "npm run build && node scripts/pack-plugin.mjs && node scripts/verify-plugin.mjs",
+    "verify": "node scripts/verify-plugin.mjs",
+    "test": "node --test scripts/publish-market.test.mjs scripts/release-policy.test.mjs",
+    "test:src": "node --test --experimental-strip-types \"src/**/*.test.ts\"",
+    "market:preflight": "node scripts/publish-market.mjs preflight"
+  },
+  "dependencies": {
+    "otools-plugin-sdk": "^0.3.0",
+    "vue": "3.5.27"
+  },
+  "devDependencies": {
+    "@types/node": "22.19.8",
+    "@vitejs/plugin-vue": "5.2.4",
+    "typescript": "5.9.3",
+    "vite": "6.4.1",
+    "vue-tsc": "3.3.11"
+  }
+}
