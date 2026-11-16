@@ -4,3 +4,4 @@ dist/
 dist-pack/
 .DS_Store
 *.log
+.superpowers/
