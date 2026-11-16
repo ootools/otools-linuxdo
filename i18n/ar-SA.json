@@ -65,5 +65,6 @@
   "settingsHowStep4": "4. الصق القيمتين كزوج هنا واحفظ. كرر عند انتهاء الصلاحية.",
   "settingsAbout": "مصدر البيانات والحدود",
   "settingsAboutBody": "يتصفح هذا الملحق محتوى linux.do العام مجهولاً وبالقراءة فقط: التصنيفات والمواضيع والردود تأتي من واجهة Discourse JSON العامة. لا تسجيل دخول ولا نشر ولا ردود ولا أي عملية كتابة.",
-  "settingsPrivacy": "يُحفظ cf_clearance و UA في localStorage هذا الـwebview فقط ويمكن مسحها في أي وقت؛ لا يرسل الملحق بياناتك لأي طرف ثالث."
+  "settingsPrivacy": "يُحفظ cf_clearance و UA في localStorage هذا الـwebview فقط ويمكن مسحها في أي وقت؛ لا يرسل الملحق بياناتك لأي طرف ثالث.",
+  "settingsPairHint": "يجب إدخال cf_clearance و User-Agent كزوج: أحدهما وحده سيرفضه Cloudflare"
 }

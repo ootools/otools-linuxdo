@@ -65,5 +65,6 @@
   "settingsHowStep4": "4. Paste both values here and save. Repeat when it expires.",
   "settingsAbout": "Data source and boundaries",
   "settingsAboutBody": "This plugin browses linux.do anonymously and read-only: categories, topics and replies come from the public Discourse JSON API. No login, posting, replying or any write operation.",
-  "settingsPrivacy": "cf_clearance and the UA are stored only in this webview's localStorage and can be cleared anytime; the plugin never sends your data to third parties."
+  "settingsPrivacy": "cf_clearance and the UA are stored only in this webview's localStorage and can be cleared anytime; the plugin never sends your data to third parties.",
+  "settingsPairHint": "cf_clearance and the User-Agent must be pasted as a pair: either one alone will be rejected by Cloudflare"
 }

@@ -65,5 +65,6 @@
   "settingsHowStep4": "4. Beide Werte als Paar hier einfügen und speichern. Bei Ablauf wiederholen.",
   "settingsAbout": "Datenquelle und Grenzen",
   "settingsAboutBody": "Dieses Plugin durchsucht linux.do anonym und nur lesend: Kategorien, Themen und Antworten stammen aus der öffentlichen Discourse-JSON-API. Kein Login, kein Posten, keine Antworten und keine Schreiboperationen.",
-  "settingsPrivacy": "cf_clearance und der UA werden nur im localStorage dieses Webviews gespeichert und können jederzeit gelöscht werden; das Plugin sendet deine Daten nie an Dritte."
+  "settingsPrivacy": "cf_clearance und der UA werden nur im localStorage dieses Webviews gespeichert und können jederzeit gelöscht werden; das Plugin sendet deine Daten nie an Dritte.",
+  "settingsPairHint": "cf_clearance und der User-Agent müssen als Paar eingetragen werden: einzeln wird die Anfrage von Cloudflare abgelehnt"
 }

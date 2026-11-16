@@ -20,6 +20,13 @@ const testStatus = ref(0);
 const savedHint = ref(false);
 let savedTimer = 0;
 
+/** CF 把 clearance 绑定到精确 UA（spike ④）：只填一对中的一个必然被拦，禁止保存。 */
+const pairIncomplete = computed(() => {
+  const cookie = cookieInput.value.trim();
+  const ua = uaInput.value.trim();
+  return (cookie !== '' && ua === '') || (cookie === '' && ua !== '');
+});
+
 const defaultUaShort = computed(() => {
   const match = DEFAULT_UA.match(/Chrome\/[\d.]+/);
   return match ? match[0] : DEFAULT_UA;
@@ -120,13 +127,17 @@ const handleTest = async (): Promise<void> => {
             />
 
             <div class="actions-row">
-              <button class="primary-button" @click="handleSave">{{ t('settingsSave') }}</button>
+              <button class="primary-button" :disabled="pairIncomplete" @click="handleSave">
+                {{ t('settingsSave') }}
+              </button>
               <button class="text-button" @click="handleClear">{{ t('settingsClear') }}</button>
-              <button class="text-button" :disabled="testState === 'testing'" @click="handleTest">
+              <button class="text-button" :disabled="pairIncomplete || testState === 'testing'" @click="handleTest">
                 {{ testState === 'testing' ? t('settingsTesting') : t('settingsTest') }}
               </button>
               <span v-if="savedHint" class="saved-hint">{{ t('settingsSaved') }}</span>
             </div>
+
+            <p v-if="pairIncomplete" class="pair-hint">{{ t('settingsPairHint') }}</p>
 
             <p v-if="testState === 'ok'" class="test-result is-ok">
               {{ t('settingsTestOk', { status: testStatus }) }}
@@ -332,6 +343,19 @@ const handleTest = async (): Promise<void> => {
 
 .test-result.is-fail {
   color: var(--ld-danger);
+}
+
+.pair-hint {
+  margin: 10px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: #d2601f;
+}
+
+.primary-button:disabled,
+.text-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .about-text {

@@ -3,6 +3,7 @@ import { invoke, isOtoolsPluginRuntime } from 'otools-plugin-sdk/runtime';
 import { readCache, writeCache } from './cache';
 import { getClearance, markBlocked } from './clearance';
 import { isChallengeBlocked } from './cf';
+import { computeHasMore, filterVisibleCategories } from './filters';
 import type {
   CategoriesEnvelope,
   Category,
@@ -310,16 +311,13 @@ export function fetchTopics(
   return getJson<TopicListEnvelope>(url, listTtl(kind), { force: opts.force }).then((envelope) => ({
     topics: Array.isArray(envelope?.topic_list?.topics) ? envelope.topic_list.topics : [],
     users: Array.isArray(envelope?.users) ? envelope.users : [],
-    hasMore: Boolean(envelope?.topic_list?.more_topics_url),
+    hasMore: computeHasMore(kind, envelope?.topic_list?.more_topics_url),
   }));
 }
 
 export function fetchCategories(force = false): Promise<Category[]> {
   return getJson<CategoriesEnvelope>(`${API_ORIGIN}/categories.json`, TTL.categories, { force }).then(
-    (envelope) =>
-      (envelope?.category_list?.categories ?? []).filter(
-        (category) => !category.read_restricted && (category.permission === undefined || category.permission === 1),
-      ),
+    (envelope) => filterVisibleCategories(envelope?.category_list?.categories ?? []),
   );
 }
 

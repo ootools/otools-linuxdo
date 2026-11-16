@@ -42,18 +42,18 @@ interface MockCategory {
 }
 
 const CATEGORIES: MockCategory[] = [
-  { id: 4, name: '开发调优', slug: 'develop', color: '32c3c3', text_color: '000000', topic_count: 128171, post_count: 1941746, position: 1, description_excerpt: '此版块包含开发、测试、调试、部署、优化、安全等方面的内容。', permission: 1, has_children: false },
-  { id: 98, name: '国产替代', slug: 'domestic', color: 'D12C25', text_color: 'FFFFFF', topic_count: 4182, post_count: 58011, position: 2, description_excerpt: '国产软硬件替代方案的交流阵地。', permission: 1, has_children: false },
-  { id: 14, name: '资源荟萃', slug: 'resource', color: '12A89D', text_color: 'FFFFFF', topic_count: 29058, post_count: 210432, position: 3, description_excerpt: '软件、教程、素材等资源的分享与求助。', permission: 1, has_children: false },
-  { id: 42, name: '文档共建', slug: 'wiki', color: '9cb6c4', text_color: '000000', topic_count: 1614, post_count: 9882, position: 4, description_excerpt: '协作共建的文档与知识库。', permission: 1, has_children: false },
-  { id: 27, name: '非我莫属', slug: 'job', color: 'a8c6fe', text_color: '000000', topic_count: 1963, post_count: 12904, position: 5, description_excerpt: '求职、招聘与职业发展交流。', permission: 1, has_children: false },
-  { id: 32, name: '读书成诗', slug: 'reading', color: 'e0d900', text_color: '000000', topic_count: 1412, post_count: 8421, position: 6, description_excerpt: '读书笔记、书评与阅读分享。', permission: 1, has_children: false },
-  { id: 34, name: '前沿快讯', slug: 'news', color: 'BB8FCE', text_color: '000000', topic_count: 28068, post_count: 98201, position: 7, description_excerpt: '科技前沿资讯的速递与讨论。', permission: 1, has_children: false },
-  { id: 92, name: '网络记忆', slug: 'feeds', color: 'F7941D', text_color: '000000', topic_count: 77, post_count: 812, position: 8, description_excerpt: '值得留存的网络内容存档。', permission: 1, has_children: false },
-  { id: 36, name: '福利羊毛', slug: 'welfare', color: 'E45735', text_color: 'FFFFFF', topic_count: 19889, post_count: 156210, position: 9, description_excerpt: '优惠、福利与羊毛线报。', permission: 1, has_children: false },
-  { id: 11, name: '搞七捻三', slug: 'gossip', color: '3AB54A', text_color: '000000', topic_count: 274830, post_count: 3120845, position: 10, description_excerpt: '闲聊灌水，天下大事。', permission: 1, has_children: false },
-  { id: 110, name: '虫洞广场', slug: 'square', color: 'ff00f7', text_color: '000000', topic_count: 140, post_count: 2044, position: 11, description_excerpt: '跨越次元的交流广场。', permission: 1, has_children: false },
-  { id: 2, name: '运营反馈', slug: 'feedback', color: '808281', text_color: '000000', topic_count: 7023, post_count: 41255, position: 12, description_excerpt: '站点运营公告与反馈收集。', permission: 1, has_children: false },
+  { id: 4, name: '开发调优', slug: 'develop', color: '32c3c3', text_color: '000000', topic_count: 128171, post_count: 1941746, position: 1, description_excerpt: '此版块包含开发、测试、调试、部署、优化、安全等方面的内容。', permission: null as unknown as number, has_children: false },
+  { id: 98, name: '国产替代', slug: 'domestic', color: 'D12C25', text_color: 'FFFFFF', topic_count: 4182, post_count: 58011, position: 2, description_excerpt: '国产软硬件替代方案的交流阵地。', permission: null as unknown as number, has_children: false },
+  { id: 14, name: '资源荟萃', slug: 'resource', color: '12A89D', text_color: 'FFFFFF', topic_count: 29058, post_count: 210432, position: 3, description_excerpt: '软件、教程、素材等资源的分享与求助。', permission: null as unknown as number, has_children: false },
+  { id: 42, name: '文档共建', slug: 'wiki', color: '9cb6c4', text_color: '000000', topic_count: 1614, post_count: 9882, position: 4, description_excerpt: '协作共建的文档与知识库。', permission: null as unknown as number, has_children: false },
+  { id: 27, name: '非我莫属', slug: 'job', color: 'a8c6fe', text_color: '000000', topic_count: 1963, post_count: 12904, position: 5, description_excerpt: '求职、招聘与职业发展交流。', permission: null as unknown as number, has_children: false },
+  { id: 32, name: '读书成诗', slug: 'reading', color: 'e0d900', text_color: '000000', topic_count: 1412, post_count: 8421, position: 6, description_excerpt: '读书笔记、书评与阅读分享。', permission: null as unknown as number, has_children: false },
+  { id: 34, name: '前沿快讯', slug: 'news', color: 'BB8FCE', text_color: '000000', topic_count: 28068, post_count: 98201, position: 7, description_excerpt: '科技前沿资讯的速递与讨论。', permission: null as unknown as number, has_children: false },
+  { id: 92, name: '网络记忆', slug: 'feeds', color: 'F7941D', text_color: '000000', topic_count: 77, post_count: 812, position: 8, description_excerpt: '值得留存的网络内容存档。', permission: null as unknown as number, has_children: false },
+  { id: 36, name: '福利羊毛', slug: 'welfare', color: 'E45735', text_color: 'FFFFFF', topic_count: 19889, post_count: 156210, position: 9, description_excerpt: '优惠、福利与羊毛线报。', permission: null as unknown as number, has_children: false },
+  { id: 11, name: '搞七捻三', slug: 'gossip', color: '3AB54A', text_color: '000000', topic_count: 274830, post_count: 3120845, position: 10, description_excerpt: '闲聊灌水，天下大事。', permission: null as unknown as number, has_children: false },
+  { id: 110, name: '虫洞广场', slug: 'square', color: 'ff00f7', text_color: '000000', topic_count: 140, post_count: 2044, position: 11, description_excerpt: '跨越次元的交流广场。', permission: null as unknown as number, has_children: false },
+  { id: 2, name: '运营反馈', slug: 'feedback', color: '808281', text_color: '000000', topic_count: 7023, post_count: 41255, position: 12, description_excerpt: '站点运营公告与反馈收集。', permission: null as unknown as number, has_children: false },
 ];
 
 const USERS: MockUser[] = [

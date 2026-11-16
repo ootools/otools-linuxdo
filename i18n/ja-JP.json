@@ -65,5 +65,6 @@
   "settingsHowStep4": "4. 2 つの値をペアでここに貼り付けて保存。期限切れの際はやり直してください。",
   "settingsAbout": "データソースと境界",
   "settingsAboutBody": "本プラグインは linux.do の公開コンテンツを匿名・閲覧のみで利用します：カテゴリ・トピック・返信は公開 Discourse JSON API から取得します。ログイン・投稿・返信などの書き込み操作には対応しません。",
-  "settingsPrivacy": "cf_clearance と UA はこの webview の localStorage にのみ保存され、いつでも消去できます。第三者にデータを送信することはありません。"
+  "settingsPrivacy": "cf_clearance と UA はこの webview の localStorage にのみ保存され、いつでも消去できます。第三者にデータを送信することはありません。",
+  "settingsPairHint": "cf_clearance と User-Agent はペアで入力してください：片方だけでは Cloudflare に拒否されます"
 }
