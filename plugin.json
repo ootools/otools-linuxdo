@@ -2,27 +2,27 @@
   "uuid": "otools-linuxdo",
   "packid": "otools-linuxdo",
   "displayName": "LINUXDO",
-  "displayNameCN": "L \u7ad9\u793e\u533a",
+  "displayNameCN": "L 站社区",
   "developerName": "OTools",
-  "summary": "\u533f\u540d\u6d4f\u89c8 LINUX DO\uff08linux.do\uff09\u5206\u7c7b\u3001\u6700\u65b0\u3001\u70ed\u95e8\u4e0e\u7cbe\u9009\u4e3b\u9898\u53ca\u56de\u590d\uff1b\u88ab Cloudflare \u76fe\u62e6\u622a\u65f6\u53ef\u7528\u81ea\u5df1\u6d4f\u89c8\u5668\u7684 cf_clearance \u81ea\u6551\u3002",
+  "summary": "匿名浏览 LINUX DO（linux.do）分类、最新、热门与精选主题及回复；被 Cloudflare 盾拦截时可用自己浏览器的 cf_clearance 自救。",
   "version": "0.1.3",
-  "minOtoolsVersion": "0.9.0",
+  "minOtoolsVersion": "0.9.9",
   "entry": "dist/index.html",
   "devUrl": "http://127.0.0.1:6572",
   "quickDev": true,
   "logo": "logo.svg",
-  "icon": "\ud83e\udd81",
+  "icon": "🦁",
   "hasAd": false,
   "inPluginPurchase": false,
   "screenshots": [],
   "key": [
     "linuxdo",
     "linux.do",
-    "l\u7ad9",
-    "\u8bba\u575b",
-    "\u793e\u533a",
-    "\u5206\u7c7b",
-    "\u4e3b\u9898",
+    "l站",
+    "论坛",
+    "社区",
+    "分类",
+    "主题",
     "topic",
     "discourse",
     "forum"
@@ -51,6 +51,5 @@
         "period"
       ]
     }
-  ],
-  "minOToolsVersion": "0.9.9"
+  ]
 }
