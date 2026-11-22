@@ -1,6 +1,6 @@
 {
   "name": "otools-linuxdo",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "type": "module",
   "description": "A standalone OTools plugin: browse LINUX DO (linux.do, Discourse) categories, topics and replies anonymously via the public JSON API.",
