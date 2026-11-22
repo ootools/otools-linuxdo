@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const directory = path.resolve(root, process.argv[2] || 'dist-pack');
@@ -78,12 +78,107 @@ const crc32 = (buffer) => {
   return (~crc) >>> 0;
 };
 
+/**
+ * 扫描 JSON 文本里的重复对象键（同一层级、同一拼写出现两次及以上）。
+ * JSON.parse 会静默丢弃重复键（后值覆盖前值），而宿主 serde 遇到已知字段
+ * 的重复直接报「duplicate field」拒收，所以打包前必须按 serde 的口径自查。
+ * 返回重复键的层级路径（按首次出现顺序，如 a[1].b）。
+ */
+export function duplicateJsonKeys(text) {
+  const duplicates = [];
+  // 栈里每个容器：isObject、已见键、路径前缀、对象层的最近键、数组层的元素下标（=已见逗号数）
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+  let stringStart = -1;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') {
+        inString = false;
+        // 刚结束的字符串是不是键：当前容器是对象，且其后（跳过空白）紧跟 ':'
+        let j = i + 1;
+        while (j < text.length && /\s/.test(text[j])) j += 1;
+        const top = stack[stack.length - 1];
+        if (top?.isObject && text[j] === ':') {
+          // 键名按 JSON 转义还原后再比较（"\u0061" 与 "a" 是同一个键）
+          const key = JSON.parse(text.slice(stringStart, i + 1));
+          const where = top.prefix ? `${top.prefix}.${key}` : key;
+          if (top.keys.has(key)) {
+            if (!duplicates.includes(where)) duplicates.push(where);
+          } else {
+            top.keys.add(key);
+            top.lastKey = key;
+          }
+        }
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      escaped = false;
+      stringStart = i;
+      continue;
+    }
+    if (ch === '{' || ch === '[') {
+      const parent = stack[stack.length - 1];
+      const prefix = !parent ? ''
+        : parent.isObject && parent.lastKey
+          ? (parent.prefix ? `${parent.prefix}.${parent.lastKey}` : parent.lastKey)
+          : parent.isObject ? parent.prefix
+            : `${parent.prefix}[${parent.commas}]`;
+      stack.push({ isObject: ch === '{', keys: new Set(), prefix, lastKey: null, commas: 0 });
+      continue;
+    }
+    if (ch === '}' || ch === ']') {
+      stack.pop();
+      continue;
+    }
+    if (ch === ',') {
+      const top = stack[stack.length - 1];
+      top.commas += 1;
+      if (top.isObject) top.lastKey = null;
+    }
+  }
+  return duplicates;
+}
+
+/**
+ * 顶层键里仅大小写不同的碰撞。宿主 serde 的字段别名常是大小写变体
+ * （minOToolsVersion/minOtoolsVersion、displayNameCN/displayNameZh 等），
+ * 两种拼写并存会被当成同一字段的重复而拒收——v0.1.3 实证。返回 "A/B" 描述。
+ */
+export function caseVariantKeyCollisions(keys) {
+  const byLower = new Map();
+  for (const key of keys) {
+    const lower = key.toLowerCase();
+    if (!byLower.has(lower)) byLower.set(lower, new Set());
+    byLower.get(lower).add(key);
+  }
+  const collisions = [];
+  for (const spellings of byLower.values()) {
+    if (spellings.size > 1) collisions.push([...spellings].sort().join('/'));
+  }
+  return collisions.sort();
+}
+
 function main() {
   if (!fs.existsSync(directory)) fail(`目录不存在：${directory}`);
 
   const manifestPath = path.join(directory, 'plugin.json');
   if (!fs.existsSync(manifestPath)) fail('缺少 plugin.json');
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const manifestText = fs.readFileSync(manifestPath, 'utf8');
+  // JSON.parse 会静默丢弃重复键（后值覆盖前值），宿主 serde 则直接拒收；
+  // v0.1.3 实证 minOtoolsVersion/minOToolsVersion 并存导致装包失败而 CI 全绿。
+  const dups = duplicateJsonKeys(manifestText);
+  if (dups.length) fail(`plugin.json 有重复键：${dups.join('、')}（宿主 serde 报 duplicate field 拒收）`);
+  const manifest = JSON.parse(manifestText);
+  const collisions = caseVariantKeyCollisions(Object.keys(manifest));
+  if (collisions.length) {
+    fail(`plugin.json 顶层键仅大小写不同：${collisions.join('、')}（serde 把大小写别名当同一字段，装包必挂 duplicate field）`);
+  }
 
   const { packid, version } = manifest;
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(packid || '')) fail(`packid 非法：${packid}`);
@@ -142,6 +237,12 @@ function main() {
   }
   ok(`ZIP ${entries.length} 个条目，CRC 全部通过`);
 
+  // 包内 plugin.json 必须与目录里这份一致（防陈旧打包或手工改动只改了一处）
+  const embeddedManifest = entries.find((e) => e.name === 'plugin.json');
+  if (!embeddedManifest) fail('ZIP 缺少 plugin.json');
+  if (embeddedManifest.data.toString('utf8') !== manifestText) fail('包内 plugin.json 与 dist-pack 目录的不一致（陈旧打包或手工改动）');
+  ok('包内 plugin.json 与目录一致');
+
   if (!names.includes(String(manifest.entry))) fail(`ZIP 缺少入口：${manifest.entry}`);
   if (!names.includes('logo.svg')) fail('ZIP 缺少 logo.svg');
   ok(`入口 ${manifest.entry} 与 logo.svg 都在包内`);
@@ -165,9 +266,12 @@ function main() {
   console.log(`\n${filename} 校验通过（${entries.length} 个条目）。`);
 }
 
-try {
-  main();
-} catch (error) {
-  console.error(error.message);
-  process.exit(1);
+// 被 node --test 导入时不执行（与 publish-market.mjs 的入口守卫一致）
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    main();
+  } catch (error) {
+    console.error(error.message);
+    process.exit(1);
+  }
 }

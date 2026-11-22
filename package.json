@@ -15,7 +15,7 @@
     "preview": "node scripts/serve-dist.mjs 6573",
     "pack": "npm run build && node scripts/pack-plugin.mjs && node scripts/verify-plugin.mjs",
     "verify": "node scripts/verify-plugin.mjs",
-    "test": "node --test scripts/publish-market.test.mjs scripts/release-policy.test.mjs",
+    "test": "node --test scripts/publish-market.test.mjs scripts/release-policy.test.mjs scripts/verify-plugin.test.mjs",
     "test:src": "node --test --experimental-strip-types \"src/**/*.test.ts\"",
     "market:preflight": "node scripts/publish-market.mjs preflight"
   },
