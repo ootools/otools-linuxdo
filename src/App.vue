@@ -72,6 +72,8 @@ const categoriesErrorText = computed(() => {
   if (error.kind === 'rate') return t('errorRate');
   if (error.kind === 'blocked') return t('errorBlocked');
   if (error.kind === 'parse') return t('errorParse');
+  if (error.kind === 'permission') return t('errorPermission');
+  if (error.kind === 'unsupported') return t('errorUnsupportedHost');
   return t('errorNetwork');
 });
 

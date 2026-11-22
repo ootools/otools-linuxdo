@@ -5,7 +5,7 @@
 
 ## 一句话
 
-独立 OTools 插件：左侧分类栏 / 右侧主题列表 / 点击进详情与回复，数据全部来自 linux.do 公开 Discourse JSON 接口，**匿名只读、不登录、不发帖**；被 Cloudflare 静默盾拦截时允许用户粘贴 `cf_clearance` 自救。
+独立 OTools 插件：左侧分类栏 / 右侧主题列表 / 点击进详情与回复，数据全部来自 linux.do 公开 Discourse JSON 接口，**匿名只读、不登录、不发帖**；网络走宿主「站点会话」API——宿主持有隔离的 linux.do WebView 会话并承载人工验证，插件不再粘贴任何 Cookie/UA（2026-11-22 迁移，见「站点会话迁移」一节）。
 
 ## 背景与为什么
 
@@ -19,7 +19,7 @@
 **目标**
 
 1. 匿名浏览：分类树、最新/热门/精选列表、主题详情、回复分页、相关主题、本地搜索。
-2. CF 兜底档：403 质询检测 → 设置面板引导粘贴 `cf_clearance` + 浏览器 UA（**成对必填**，CF 把 cookie 绑定到精确 UA 字符串，只给 cookie 大概率无效）→ 请求自动携带；失败统一提示。
+2. 站点会话档：宿主为插件持有隔离持久的 linux.do WebView 会话；challenge 时插件显式调 `open` 打开宿主站点窗口由用户亲自完成验证，随后重试（详见「站点会话迁移」）。
 3. 完整复用 v2ex 的工程底座：i18n 8 语言、mock 预览、主题自持、缓存/节流、打包校验、发布工作流。
 
 **非目标（本期不做）**
@@ -30,17 +30,17 @@
 
 **反目标（红线）**
 
-- 不抓网页 HTML、不注入脚本、不绕过 CF 盾本身（只携带用户自己浏览器合法获得的 cookie）。
+- 不抓网页 HTML、不注入业务脚本、不绕过 CF 盾本身；不读取/导出 Cookie 与 UA（站点数据只存在于宿主的隔离会话内）。
 - 不引入账号体系、不接触任何密码。
 - 不做「全自动过盾」（Turnstile 求解器之类）。
 
 ## 已拍板的方案
 
-三条路：① 纯复刻 v2ex（裸 reqwest 指纹直连）；② 复刻 + cf_clearance 兜底档；③ webview/iframe 直嵌（死于无 CORS 头 + `X-Frame-Options: SAMEORIGIN`，否）。**选 ②**：① 是 ② 的子集（默认行为完全一致），② 让插件「默认可用 + 被拦可自救」，代价是多一块设置 UI + cookie/UA 存储与失效检测。
+三条路：① 纯复刻 v2ex（裸 reqwest 指纹直连）；② 复刻 + cf_clearance 兜底档（v0.1.x 实现）；③ webview/iframe 直嵌（死于无 CORS 头 + `X-Frame-Options: SAMEORIGIN`，否）。**v0.1.x 选 ②**；2026-11-22 宿主「通用插件站点 WebView 会话」能力落地后**迁移到宿主站点会话 API**（见下节），② 的手动 cookie 档整体下线。
 
 ## 接口契约（2026-11-16 用真实 Chrome 过盾抓样，样本存 `.probe/`）
 
-Base：`https://linux.do`。全部 GET，走宿主 `otools_host_http_send`（linux.do 无 CORS 头，浏览器 fetch 不可用）。UA 伪装 Chrome；带 `cf_clearance` 时附 Cookie。
+Base：`https://linux.do`。全部 GET，走宿主站点会话命令 `otools_host_webview_session_request`（`sessionId=linuxdo-public`，作用域见 plugin.json `webviewSessions`：6 类路径 + 3 个 query key）；宿主在隔离 WebView 内执行固定同源 fetch。`?mock=1` 开发走查仍走本地 mock。
 
 | 能力 | 端点 | 说明 |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ Base：`https://linux.do`。全部 GET，走宿主 `otools_host_http_send`（lin
 
 **搜索**：匿名 `search.json` 返回 `{"errors":["您需要登录才能执行此操作。"],"error_type":"not_logged_in"}`（实测）——搜索框只做本地过滤。
 
-**Cloudflare 挡板判定**：HTTP 403 且（响应头 `cf-mitigated: challenge` 或 body 含 `Just a moment` / `请稍候`）→ 进入兜底流程；429 → 限流提示；其余按 http 错误走。
+**Cloudflare 挡板判定（会话 API 版）**：宿主返回 `interaction_required` → 插件置 blocked 提示并提供「打开站点验证」（不透传页面内容）；带 HTTP 状态的 `http_error`：429 → 限流提示、404 → 不存在，其余按 http 错误走。
 
 ## 架构
 
@@ -75,8 +75,8 @@ otools-linuxdo/                 独立仓 git@github.com:ootools/otools-linuxdo.
 ├── .github/workflows/release-plugin.yml        从 v2ex 拷贝
 ├── i18n/                       8 语言（zh-CN/en-US/ja-JP/ko-KR/de-DE/ru-RU/es-ES/ar-SA），键结构随 v2ex，按 Discourse 语境改词
 └── src/
-    ├── api.ts                  端点表 + host http + 序列化队列（180ms→300ms）+ 缓存 TTL + CF 挡板判定/兜底注入
-    ├── clearance.ts            【新】cf_clearance + UA 覆写的存取（localStorage `otools-linuxdo:clearance`）与失效状态机
+    ├── api.ts                  端点表 + 站点会话请求 + 序列化队列（180ms→300ms）+ 缓存 TTL + mock 分支盾判定
+    ├── site-session.ts         【新】linuxdo-public 会话 adapter：作用域白名单、命令形状、宿主错误归一化
     ├── types.ts                Discourse 模型（Topic/Post/Category/User/…）
     ├── cache.ts / format.ts / links.ts / theme.ts / i18n.ts / main.ts   原样迁移（links.ts 站内链接正则改 /t/topic/{id}）
     ├── mock/data.ts            以 .probe/ 真实样本裁剪生成（不含真人帖全文，标题+结构保留）
@@ -86,27 +86,28 @@ otools-linuxdo/                 独立仓 git@github.com:ootools/otools-linuxdo.
         ├── CategorySidebar.vue ← NodeSidebar.vue 改造：分类树（含 read_restricted 灰显）、最新/热门/精选入口、本地过滤
         ├── TopicList.vue       徽章（分类色块+emoji）、作者、相对时间、reactions/回复/浏览数、已采纳答案角标
         ├── TopicDetail.vue     cooked HTML 白名单清洗渲染、楼层 reactions、回复分页、相关主题、板块跳转
-        ├── SettingsPanel.vue   【新】cf_clearance / UA 覆写 / 清缓存 / 数据源说明 / 挡板引导（替代 AccountMenu 的位置）
+        ├── SettingsPanel.vue   【新】站点授权状态 / 申请 / 撤销 / 打开站点验证 / 测试连接 / 清缓存（替代 AccountMenu 的位置）
         ├── LdAvatar.vue        ← V2Avatar.vue 改造（{size} 模板 + letter_avatar 形态）
         └── AppIcon.vue
 ```
 
 **删除不迁移**：`auth.ts`、`token.ts`、`notifications.ts`、`AccountMenu.vue`（登录/提醒整块）。
 
-### CF 兜底状态机
+### 站点会话迁移（2026-11-22）
 
 ```
-请求 → host http（UA=设置面板覆写值；默认写死当前 Chrome stable UA 字符串常量，无 cookie 时也用它）
- ├─ 200        → 正常渲染；clearanceState=idle
- ├─ 403+盾特征 → clearanceState=blocked；若已粘贴 cookie 仍 403 → 仍为 blocked（「失效」「UA 不匹配」
- │               「出口 IP 变了」客户端不可区分，引导文案统一覆盖三种原因与重新复制步骤）
- │               设置面板亮引导：「系统浏览器打开 linux.do → 过盾 → F12 → Application → Cookies
- │               复制 cf_clearance + Console 复制 navigator.userAgent，两个都粘进插件」
- └─ 429/其他   → 按 v2ex 的错误样式呈现
-设置面板保存 cookie/UA 成对生效；提供「测试连接」按钮（请求 latest.json 验证并显示结果）。
+请求 → 宿主 otools_host_webview_session_request（caller+清单声明+授权+scope hash 四重校验）
+ ├─ ok:true          → 直接拿到已解析 JSON（缓存/节流/解析 UX 不变）
+ ├─ interaction_required → blocked 提示 +「打开站点验证」按钮；用户在宿主窗口亲自完成后重试
+ ├─ http_error(429/404)  → 限流 / 不存在（原有 UX）
+ ├─ permission_required / permission_denied → 引导到设置面板申请授权
+ └─ unsupported_platform / unsupported_host → 本设备或宿主版本不支持，明确提示
 ```
 
-状态存 webview `localStorage`，仅本机；用户可随时清除。cookie 来自用户自己的浏览器，插件不做任何盾的自动求解。
+- 插件不再存储/粘贴 `cf_clearance` 与 UA（`clearance.ts` 已删除）；网站数据（Cookie 等）只存在于宿主按
+  `source+uuid+origin` 隔离的持久 WebView 会话内，跨重启保留，撤销/卸载时清除（宿主负责）。
+- 首次访问需用户在宿主授权窗批准 `linuxdo-public` 精确作用域；修改 path/query 声明会要求重新授权。
+- 宿主最低版本：内置站点会话命令的宿主（API 缺失时提示升级，不回退宿主普通 HTTP）。
 
 ### 缓存与节流（对齐 v2ex，数值微调）
 

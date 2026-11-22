@@ -1,9 +1,13 @@
 import { ref } from 'vue';
-import { invoke, isOtoolsPluginRuntime } from 'otools-plugin-sdk/runtime';
-import { readCache, writeCache } from './cache';
-import { getClearance, markBlocked } from './clearance';
-import { isChallengeBlocked } from './cf';
-import { computeHasMore, filterVisibleCategories } from './filters';
+import { readCache, writeCache } from './cache.ts';
+import { isChallengeBlocked } from './cf.ts';
+import { computeHasMore, filterVisibleCategories } from './filters.ts';
+import {
+  createLinuxdoSiteSession,
+  SiteSessionError,
+  type JsonRequestResult,
+  type LinuxdoSiteSession,
+} from './site-session.ts';
 import type {
   CategoriesEnvelope,
   Category,
@@ -13,25 +17,21 @@ import type {
   TopicDetail,
   TopicListEnvelope,
   TopPeriod,
-} from './types';
+} from './types.ts';
 
-export type { ListKind, TopPeriod } from './types';
+export type { ListKind, TopPeriod } from './types.ts';
 
 /**
  * linux.do 公开 Discourse JSON 客户端（匿名只读）。
  *
- * 全部请求走宿主 `otools_host_http_send`（linux.do 不返回 CORS 头）。
- * CF 静默盾：403 + 盾特征 → 抛 blocked 并置 clearanceState=blocked，
- * 设置面板引导用户粘贴自己浏览器的 cf_clearance + UA（Spike 结论：整串精确配对）。
+ * 全部正式请求走宿主站点会话 API（otools_host_webview_session_request）：由宿主
+ * 持有隔离的 linux.do WebView 会话，插件只能请求 plugin.json 声明过的只读 JSON
+ * 路径与 query key。challenge/拦截以 interaction_required 返回（不透传页面内容）；
+ * `?mock=1` 开发走查仍走本地 mock，无宿主环境清晰提示能力缺失。
  */
 
 export const API_ORIGIN = 'https://linux.do';
 
-/** Spike（2026-11-16）实测的默认 UA：无用户覆写时使用；带 cookie 时必须换成用户浏览器 UA。 */
-export const DEFAULT_UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36';
-
-const HOST_HTTP_COMMAND = 'otools_host_http_send';
 const REQUEST_GAP_MS = 300;
 
 const MINUTE = 60 * 1000;
@@ -48,7 +48,15 @@ const TTL = {
   topicPage: 3 * MINUTE,
 };
 
-export type LinuxdoErrorKind = 'network' | 'rate' | 'blocked' | 'notfound' | 'http' | 'parse';
+export type LinuxdoErrorKind =
+  | 'network'
+  | 'rate'
+  | 'blocked'
+  | 'notfound'
+  | 'http'
+  | 'parse'
+  | 'permission'
+  | 'unsupported';
 
 export class LinuxdoApiError extends Error {
   readonly kind: LinuxdoErrorKind;
@@ -77,12 +85,8 @@ interface HttpResult {
   status: number;
   text: string;
   headers: Record<string, string>;
-}
-
-interface HostHttpResponse {
-  status: number;
-  body_text?: string | null;
-  headers?: Array<{ key: string; value: string }>;
+  /** 会话 API 直接给出已解析 JSON；mock 分支仍走 text。 */
+  data?: unknown;
 }
 
 interface RequestOptions {
@@ -91,8 +95,15 @@ interface RequestOptions {
   live?: boolean;
 }
 
+let siteSession: LinuxdoSiteSession = createLinuxdoSiteSession();
+
+/** 仅测试注入使用；生产代码永远走默认 adapter。 */
+export function setSiteSessionForTests(session: LinuxdoSiteSession): void {
+  siteSession = session;
+}
+
 const devMockEnabled = (): boolean => {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return false;
+  if (!import.meta.env?.DEV || typeof window === 'undefined') return false;
   try {
     return new URLSearchParams(window.location.search).has('mock');
   } catch {
@@ -100,67 +111,58 @@ const devMockEnabled = (): boolean => {
   }
 };
 
-const canUseHostHttp = (): boolean => {
-  if (typeof window === 'undefined') return false;
-  const host = window as unknown as { __TAURI_INTERNALS__?: unknown };
-  return Boolean(host.__TAURI_INTERNALS__) || isOtoolsPluginRuntime();
-};
+/** 把插件自建的绝对 URL 拆成声明作用域内的 path + query（origin 由宿主决定）。 */
+export function splitRequestUrl(url: string): { path: string; query: Record<string, string> } {
+  const parsed = new URL(url);
+  const query: Record<string, string> = {};
+  parsed.searchParams.forEach((value, key) => {
+    query[key] = value;
+  });
+  return { path: parsed.pathname, query };
+}
 
-const toHeaderMap = (items: Array<{ key: string; value: string }> | undefined): Record<string, string> => {
-  const headers: Record<string, string> = {};
-  for (const item of items ?? []) {
-    if (!item || typeof item.key !== 'string') continue;
-    headers[item.key.toLowerCase()] = String(item.value ?? '');
+/** 宿主固定枚举 → 原有 UX 错误类别；错误结果不含页面内容，故 detail 恒为空。 */
+export function sessionFailureToApiError(result: JsonRequestResult): LinuxdoApiError {
+  const error = result.error ?? 'session_unavailable';
+  switch (error) {
+    case 'interaction_required':
+      return new LinuxdoApiError('blocked', 'cloudflare challenge', { status: result.status });
+    case 'http_error':
+      if (result.status === 429) return new LinuxdoApiError('rate', 'rate limit exceeded', { status: 429 });
+      if (result.status === 404) return new LinuxdoApiError('notfound', 'resource not found', { status: 404 });
+      return new LinuxdoApiError('http', `unexpected status ${result.status ?? ''}`, { status: result.status });
+    case 'permission_required':
+    case 'permission_denied':
+      return new LinuxdoApiError('permission', 'site session permission required', { status: result.status });
+    case 'unsupported_platform':
+      return new LinuxdoApiError('unsupported', 'isolated site sessions unsupported here', {});
+    case 'invalid_json':
+      return new LinuxdoApiError('parse', 'response is not json', {});
+    default:
+      return new LinuxdoApiError('network', 'site session request failed', {});
   }
-  return headers;
-};
+}
 
-/** Spike 结论：Accept + User-Agent（覆写优先），cookie 非空时附 Cookie。 */
-const buildHeaders = (): Array<{ key: string; value: string }> => {
-  const { cookie, ua } = getClearance();
-  const headers = [
-    { key: 'Accept', value: 'application/json' },
-    { key: 'User-Agent', value: ua || DEFAULT_UA },
-  ];
-  if (cookie) headers.push({ key: 'Cookie', value: `cf_clearance=${cookie}` });
-  return headers;
-};
+const performRequest = async (url: string, options: RequestOptions): Promise<HttpResult> => {
+  if (!options.live && devMockEnabled()) {
+    const { resolveMock } = await import('./mock/data');
+    const mocked = resolveMock(url, { method: 'GET' });
+    if (mocked !== null) {
+      return { status: mocked.status, text: mocked.body, headers: {} };
+    }
+  }
 
-const hostRequest = async (url: string): Promise<HttpResult> => {
-  const response = await invoke<HostHttpResponse>(HOST_HTTP_COMMAND, {
-    request: {
-      id: '',
-      name: 'linuxdo',
-      method: 'GET',
-      url,
-      headers: buildHeaders(),
-      cookies: [],
-      params: [],
-      body_type: 'none',
-      body: '',
-      timeout_secs: 20,
-      follow_redirects: true,
-    },
-  });
-
-  return {
-    status: Number(response?.status ?? 0),
-    text: String(response?.body_text ?? ''),
-    headers: toHeaderMap(response?.headers),
-  };
-};
-
-const browserRequest = async (url: string): Promise<HttpResult> => {
-  const headers: Record<string, string> = {};
-  for (const header of buildHeaders()) headers[header.key] = header.value;
-
-  const response = await fetch(url, { method: 'GET', headers, cache: 'no-store' });
-  const text = await response.text();
-  const responseHeaders: Record<string, string> = {};
-  response.headers.forEach((value, key) => {
-    responseHeaders[key.toLowerCase()] = value;
-  });
-  return { status: response.status, text, headers: responseHeaders };
+  const { path, query } = splitRequestUrl(url);
+  const result = await siteSession.request(path, query);
+  if (result.ok) {
+    return {
+      status: result.status ?? 200,
+      text: '',
+      headers: { 'content-type': result.contentType ?? 'application/json' },
+      data: result.data,
+    };
+  }
+  throw sessionFailureToApiError(result);
 };
 
 let requestChain: Promise<unknown> = Promise.resolve();
@@ -180,43 +182,12 @@ const throttle = async (): Promise<void> => {
   lastRequestAt = Date.now();
 };
 
-/** 网络失败重试上限 1 次（SPEC Review Focus #4：blocked 不重试，防打爆限流）。 */
-const performRequest = async (url: string, options: RequestOptions): Promise<HttpResult> => {
-  if (!options.live && devMockEnabled()) {
-    const { resolveMock } = await import('./mock/data');
-    const mocked = resolveMock(url, { method: 'GET' });
-    if (mocked !== null) {
-      return { status: mocked.status, text: mocked.body, headers: {} };
-    }
-  }
-
-  if (canUseHostHttp()) {
-    let attempt = 0;
-    for (;;) {
-      try {
-        return await hostRequest(url);
-      } catch (error) {
-        attempt += 1;
-        // 宿主命令不可用（旧版本宿主）时回退 webview fetch；跨域失败会落到 network 错误。
-        if (attempt >= 2) {
-          if (import.meta.env.DEV) {
-            console.warn('[linuxdo] host http failed, falling back to fetch', error);
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  return browserRequest(url);
-};
-
+/** mock 分支专用：沿用 CF 盾判定，支撑 `?mock=1&blocked=1` 走查。 */
 const readResult = async (result: HttpResult): Promise<string> => {
   const text = result.text.trim();
   if (!text) throw new LinuxdoApiError('parse', 'empty response');
 
   if (isChallengeBlocked(result.status, result.headers['cf-mitigated'], text.slice(0, 400))) {
-    markBlocked();
     throw new LinuxdoApiError('blocked', 'cloudflare challenge', { status: result.status });
   }
   if (result.status === 429) {
@@ -252,12 +223,26 @@ const getJson = async <T>(url: string, ttlMs: number, options: RequestOptions = 
     try {
       result = await performRequest(url, options);
     } catch (error) {
+      if (error instanceof LinuxdoApiError) throw error;
+      if (error instanceof SiteSessionError) {
+        // adapter 的本地判定：宿主能力缺失或作用域校验失败。
+        if (error.code === 'unsupported_host') {
+          throw new LinuxdoApiError('unsupported', 'host does not support site sessions');
+        }
+        throw new LinuxdoApiError('network', 'site session request failed', { detail: error.message });
+      }
       const message = error instanceof Error ? error.message : String(error);
       throw new LinuxdoApiError('network', 'network request failed', { detail: message });
     } finally {
       netBusy.value = false;
     }
 
+    if (result.data !== undefined) {
+      if (ttlMs > 0) writeCache(url, result.data);
+      return result.data as T;
+    }
+
+    // mock 分支：文本形态，保留原有状态码/盾判定语义。
     const text = await readResult(result);
 
     let data: T;
@@ -273,7 +258,7 @@ const getJson = async <T>(url: string, ttlMs: number, options: RequestOptions = 
   });
 };
 
-const buildListUrl = (kind: ListKind, opts: { categoryId?: number; slug?: string; page?: number; period?: TopPeriod }): string => {
+export const buildListUrl = (kind: ListKind, opts: { categoryId?: number; slug?: string; page?: number; period?: TopPeriod }): string => {
   const page = Math.max(1, opts.page ?? 1);
   switch (kind) {
     case 'latest':
@@ -331,19 +316,38 @@ export function fetchTopic(id: number, page = 1, force = false): Promise<TopicDe
   });
 }
 
-/** 设置面板「测试连接」：绕过 mock 与缓存，报告 ok/blocked/HTTP 状态。 */
-export async function testConnection(): Promise<{ ok: boolean; blocked: boolean; status: number }> {
+/** 设置面板「测试连接」：绕过 mock 与缓存，报告 ok/blocked/权限/平台支持状态。 */
+export async function testConnection(): Promise<{
+  ok: boolean;
+  blocked: boolean;
+  permission: boolean;
+  unsupported: boolean;
+  status: number;
+}> {
   await throttle();
   netBusy.value = true;
   try {
-    const result = await performRequest(`${API_ORIGIN}/latest.json?no_definitions=true&page=1`, { live: true });
-    const text = result.text.trim();
-    const blocked = isChallengeBlocked(result.status, result.headers['cf-mitigated'], text.slice(0, 400));
-    if (blocked) markBlocked();
-    return { ok: !blocked && result.status === 200 && text.startsWith('{'), blocked, status: result.status };
+    const result = await siteSession.request('/latest.json', { no_definitions: 'true', page: '1' });
+    if (result.ok) {
+      return { ok: true, blocked: false, permission: false, unsupported: false, status: result.status ?? 200 };
+    }
+    const failure = sessionFailureToApiError(result);
+    return {
+      ok: false,
+      blocked: failure.kind === 'blocked',
+      permission: failure.kind === 'permission',
+      unsupported: failure.kind === 'unsupported',
+      status: result.status ?? 0,
+    };
   } catch (error) {
-    if (import.meta.env.DEV) console.warn('[linuxdo] testConnection failed', error);
-    return { ok: false, blocked: false, status: 0 };
+    if (import.meta.env?.DEV) console.warn('[linuxdo] testConnection failed', error);
+    return {
+      ok: false,
+      blocked: false,
+      permission: false,
+      unsupported: error instanceof SiteSessionError && error.code === 'unsupported_host',
+      status: 0,
+    };
   } finally {
     netBusy.value = false;
   }

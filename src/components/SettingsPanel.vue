@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { clearCache } from '../cache';
-import { DEFAULT_UA, testConnection } from '../api';
-import { clearClearance, getClearance, setClearance } from '../clearance';
+import { testConnection } from '../api';
+import { createLinuxdoSiteSession, type SiteSessionGrantSummary } from '../site-session.ts';
 
 const props = defineProps<{
   open: boolean;
@@ -13,34 +13,22 @@ const emit = defineEmits<{
   (event: 'close'): void;
 }>();
 
-const cookieInput = ref('');
-const uaInput = ref('');
-const testState = ref<'idle' | 'testing' | 'ok' | 'blocked' | 'fail'>('idle');
+const session = createLinuxdoSiteSession();
+const grantActive = ref(false);
+const grantStatusText = ref('');
+const testState = ref<'idle' | 'testing' | 'ok' | 'blocked' | 'fail' | 'permission' | 'unsupported'>('idle');
 const testStatus = ref(0);
+const busy = ref(false);
 const savedHint = ref(false);
 let savedTimer = 0;
-
-/** CF 把 clearance 绑定到精确 UA（spike ④）：只填一对中的一个必然被拦，禁止保存。 */
-const pairIncomplete = computed(() => {
-  const cookie = cookieInput.value.trim();
-  const ua = uaInput.value.trim();
-  return (cookie !== '' && ua === '') || (cookie === '' && ua !== '');
-});
-
-const defaultUaShort = computed(() => {
-  const match = DEFAULT_UA.match(/Chrome\/[\d.]+/);
-  return match ? match[0] : DEFAULT_UA;
-});
 
 watch(
   () => props.open,
   (open) => {
     if (open) {
-      const pair = getClearance();
-      cookieInput.value = pair.cookie;
-      uaInput.value = pair.ua;
       testState.value = 'idle';
       testStatus.value = 0;
+      void refreshGrants();
     }
   },
 );
@@ -53,17 +41,71 @@ const flashSaved = (): void => {
   }, 1600);
 };
 
-const handleSave = (): void => {
-  setClearance(cookieInput.value.trim(), uaInput.value.trim());
-  flashSaved();
+const refreshGrants = async (): Promise<void> => {
+  try {
+    const grants: SiteSessionGrantSummary[] = await session.listGrants();
+    const active = grants.find((grant) => grant.sessionId === 'linuxdo-public' && grant.status === 'active')
+      ?? grants.find((grant) => grant.origin === 'https://linux.do' && grant.status === 'active');
+    grantActive.value = Boolean(active);
+    grantStatusText.value = grantActive.value ? props.t('settingsGrantActive') : props.t('settingsGrantNone');
+  } catch {
+    grantActive.value = false;
+    grantStatusText.value = props.t('settingsGrantNone');
+  }
 };
 
-const handleClear = (): void => {
-  clearClearance();
-  cookieInput.value = '';
-  uaInput.value = '';
-  testState.value = 'idle';
-  flashSaved();
+const handleRequestAccess = async (): Promise<void> => {
+  busy.value = true;
+  try {
+    const status = await session.requestAccess();
+    grantActive.value = status.status === 'granted';
+    grantStatusText.value =
+      status.status === 'granted'
+        ? props.t('settingsGrantActive')
+        : props.t('settingsGrantRequested');
+  } catch (error) {
+    grantStatusText.value = (error as { code?: string }).code === 'unsupported_host'
+      ? props.t('errorUnsupportedHost')
+      : props.t('settingsGrantRequestFail');
+  } finally {
+    busy.value = false;
+    flashSaved();
+  }
+};
+
+const handleRevoke = async (): Promise<void> => {
+  busy.value = true;
+  try {
+    await session.revoke();
+    grantStatusText.value = props.t('settingsGrantRevoked');
+    grantActive.value = false;
+  } catch {
+    grantStatusText.value = props.t('settingsGrantRequestFail');
+  } finally {
+    busy.value = false;
+    flashSaved();
+  }
+};
+
+/** challenge 需要人工验证：打开宿主的站点窗口，用户亲自完成后回来重试。 */
+const handleOpenSite = async (): Promise<void> => {
+  busy.value = true;
+  try {
+    await session.open();
+    testState.value = 'idle';
+    grantStatusText.value = props.t('settingsVerifyHint');
+  } catch (error) {
+    const code = (error as { code?: string }).code;
+    testState.value =
+      code === 'unsupported_host' || code === 'unsupported_platform'
+        ? 'unsupported'
+        : code === 'permission_required' || code === 'permission_denied'
+          ? 'permission'
+          : 'fail';
+  } finally {
+    busy.value = false;
+    flashSaved();
+  }
 };
 
 const handleClearCache = (): void => {
@@ -72,15 +114,18 @@ const handleClearCache = (): void => {
 };
 
 const handleTest = async (): Promise<void> => {
-  // 先保存当前输入再测，保证「改完即测」的语义。
-  setClearance(cookieInput.value.trim(), uaInput.value.trim());
   testState.value = 'testing';
   const result = await testConnection();
   testStatus.value = result.status;
   if (result.ok) testState.value = 'ok';
   else if (result.blocked) testState.value = 'blocked';
+  else if (result.permission) testState.value = 'permission';
+  else if (result.unsupported) testState.value = 'unsupported';
   else testState.value = 'fail';
+  void refreshGrants();
 };
+
+const stateLabel = computed(() => props.t('settingsGrantStatus'));
 </script>
 
 <template>
@@ -96,49 +141,35 @@ const handleTest = async (): Promise<void> => {
 
         <div class="settings-scroll">
           <section class="settings-section">
-            <h3>{{ t('settingsHowTitle') }}</h3>
-            <ol class="how-list">
-              <li>{{ t('settingsHowStep1') }}</li>
-              <li>{{ t('settingsHowStep2') }}</li>
-              <li>{{ t('settingsHowStep3') }}</li>
-              <li>{{ t('settingsHowStep4') }}</li>
-            </ol>
+            <h3>{{ t('settingsGrantTitle') }}</h3>
+            <p class="grant-status">
+              <span class="field-label">{{ stateLabel }}</span>
+              <span :class="grantActive ? 'is-ok' : 'is-muted'">{{ grantStatusText }}</span>
+            </p>
+            <p class="about-text">{{ t('settingsGrantBody') }}</p>
+            <div class="actions-row">
+              <button class="primary-button" :disabled="busy" @click="handleRequestAccess">
+                {{ t('settingsRequestAccess') }}
+              </button>
+              <button class="text-button" :disabled="busy" @click="handleRevoke">
+                {{ t('settingsRevoke') }}
+              </button>
+              <button class="text-button" :disabled="busy" @click="handleOpenSite">
+                {{ t('settingsOpenSite') }}
+              </button>
+            </div>
+            <p v-if="savedHint && grantStatusText" class="saved-hint">{{ grantStatusText }}</p>
+            <p class="about-text is-muted">{{ t('settingsVerifyHint') }}</p>
           </section>
 
           <section class="settings-section">
-            <label class="field-label" for="ld-clearance">{{ t('settingsClearance') }}</label>
-            <textarea
-              id="ld-clearance"
-              v-model="cookieInput"
-              class="field-input field-textarea"
-              rows="3"
-              :placeholder="t('settingsClearancePlaceholder')"
-              spellcheck="false"
-            />
-
-            <label class="field-label" for="ld-ua">{{ t('settingsUa') }}</label>
-            <input
-              id="ld-ua"
-              v-model="uaInput"
-              class="field-input"
-              type="text"
-              :placeholder="t('settingsUaPlaceholder', { default: defaultUaShort })"
-              spellcheck="false"
-            />
-
             <div class="actions-row">
-              <button class="primary-button" :disabled="pairIncomplete" @click="handleSave">
-                {{ t('settingsSave') }}
-              </button>
-              <button class="text-button" @click="handleClear">{{ t('settingsClear') }}</button>
-              <button class="text-button" :disabled="pairIncomplete || testState === 'testing'" @click="handleTest">
+              <button class="text-button" :disabled="testState === 'testing'" @click="handleTest">
                 {{ testState === 'testing' ? t('settingsTesting') : t('settingsTest') }}
               </button>
+              <button class="text-button" @click="handleClearCache">{{ t('settingsClearCache') }}</button>
               <span v-if="savedHint" class="saved-hint">{{ t('settingsSaved') }}</span>
             </div>
-
-            <p v-if="pairIncomplete" class="pair-hint">{{ t('settingsPairHint') }}</p>
-
             <p v-if="testState === 'ok'" class="test-result is-ok">
               {{ t('settingsTestOk', { status: testStatus }) }}
             </p>
@@ -148,12 +179,12 @@ const handleTest = async (): Promise<void> => {
             <p v-else-if="testState === 'fail'" class="test-result is-fail">
               {{ t('settingsTestFail', { status: testStatus }) }}
             </p>
-          </section>
-
-          <section class="settings-section">
-            <div class="actions-row">
-              <button class="text-button" @click="handleClearCache">{{ t('settingsClearCache') }}</button>
-            </div>
+            <p v-else-if="testState === 'permission'" class="test-result is-blocked">
+              {{ t('errorPermission') }}
+            </p>
+            <p v-else-if="testState === 'unsupported'" class="test-result is-fail">
+              {{ t('errorUnsupportedHost') }}
+            </p>
           </section>
 
           <section class="settings-section">
@@ -178,195 +209,45 @@ const handleTest = async (): Promise<void> => {
   background: rgb(0 0 0 / 0.36);
   animation: backdrop-in 0.16s ease-out;
 }
-
-@keyframes backdrop-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
 .settings-panel {
+  width: min(520px, calc(100vw - 32px));
+  max-height: min(640px, calc(100vh - 64px));
   display: flex;
   flex-direction: column;
-  width: min(520px, calc(100vw - 32px));
-  max-height: min(560px, calc(100vh - 48px));
   border-radius: 14px;
-  background: var(--ld-bg);
-  border: 1px solid var(--ld-border);
-  box-shadow: 0 24px 64px rgb(0 0 0 / 0.28);
+  background: var(--ld-panel-bg, #fff);
+  box-shadow: 0 18px 48px rgb(0 0 0 / 0.22);
   overflow: hidden;
 }
-
 .settings-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ld-border);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--ld-border, #e5e8ef);
 }
-
-.settings-head h2 {
-  margin: 0;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--ld-text);
-}
-
-.settings-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 4px 16px 18px;
-}
-
-.settings-section + .settings-section {
-  margin-top: 4px;
-}
-
-.settings-section h3 {
-  margin: 14px 0 6px;
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--ld-text-2);
-}
-
-.how-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.how-list li {
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--ld-text-3);
-}
-
-.field-label {
-  display: block;
-  margin: 10px 0 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ld-text-2);
-}
-
-.field-input {
-  width: 100%;
-  padding: 7px 9px;
-  border: 1px solid var(--ld-border);
-  border-radius: 8px;
-  background: var(--ld-fill);
-  color: var(--ld-text);
-  font-size: 11.5px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  outline: 0;
-  box-sizing: border-box;
-}
-
-.field-input:focus {
-  border-color: var(--ld-accent);
-  background: var(--ld-bg);
-}
-
-.field-textarea {
-  resize: vertical;
-  word-break: break-all;
-}
-
-.actions-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.primary-button {
-  padding: 5px 14px;
-  border: 0;
-  border-radius: 7px;
-  background: var(--ld-accent);
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.primary-button:hover {
-  filter: brightness(1.06);
-}
-
-.text-button {
-  padding: 4px 10px;
-  border: 1px solid var(--ld-border);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--ld-text-2);
-  font-size: 11.5px;
-  cursor: pointer;
-}
-
-.text-button:hover:not(:disabled) {
-  background: var(--ld-hover);
-  border-color: var(--ld-border-strong);
-}
-
-.text-button:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.saved-hint {
-  font-size: 10.5px;
-  color: var(--ld-success);
-}
-
-.test-result {
-  margin: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.55;
-}
-
-.test-result.is-ok {
-  color: var(--ld-success);
-}
-
-.test-result.is-blocked {
-  color: #d2601f;
-}
-
-.test-result.is-fail {
-  color: var(--ld-danger);
-}
-
-.pair-hint {
-  margin: 10px 0 0;
-  font-size: 11px;
-  line-height: 1.55;
-  color: #d2601f;
-}
-
-.primary-button:disabled,
-.text-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.about-text {
-  margin: 0 0 6px;
-  font-size: 11.5px;
-  line-height: 1.6;
-  color: var(--ld-text-2);
-}
-
-.about-text.is-muted {
-  font-size: 10.5px;
-  color: var(--ld-text-3);
+.settings-head h2 { margin: 0; font-size: 16px; }
+.settings-scroll { padding: 14px 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.settings-section { display: flex; flex-direction: column; gap: 8px; }
+.settings-section h3 { margin: 0; font-size: 14px; }
+.grant-status { display: flex; gap: 8px; align-items: baseline; margin: 0; }
+.is-ok { color: #1f7a3f; }
+.is-muted { color: var(--ld-muted, #6a7386); }
+.field-label { font-size: 12px; color: var(--ld-muted, #6a7386); }
+.actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.primary-button, .text-button { font: inherit; font-size: 13px; border-radius: 8px; cursor: pointer; }
+.primary-button { border: 1px solid #315bd7; background: #315bd7; color: #fff; padding: 6px 12px; }
+.text-button { border: 1px solid var(--ld-border, #c9d0de); background: transparent; color: inherit; padding: 6px 10px; }
+.text-button:disabled, .primary-button:disabled { opacity: 0.5; cursor: default; }
+.saved-hint { font-size: 12px; color: var(--ld-muted, #6a7386); margin: 0; }
+.test-result { margin: 0; font-size: 13px; padding: 8px 10px; border-radius: 8px; }
+.test-result.is-ok { background: #e4f5eb; color: #20623a; }
+.test-result.is-blocked { background: #fff0e6; color: #873b0a; }
+.test-result.is-fail { background: #fdeaea; color: #8f2323; }
+.about-text { margin: 0; font-size: 12.5px; line-height: 1.6; }
+.about-text.is-muted { color: var(--ld-muted, #6a7386); }
+@media (prefers-color-scheme: dark) {
+  .settings-panel { background: #20242e; --ld-panel-bg: #20242e; --ld-border: #3a4152; --ld-muted: #9aa4ba; }
+  .text-button { background: #262c39; }
 }
 </style>

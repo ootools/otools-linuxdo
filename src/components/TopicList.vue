@@ -81,6 +81,10 @@ const errorText = computed(() => {
       return props.t('errorHttp', { status: error.status ?? 0 });
     case 'parse':
       return props.t('errorParse');
+    case 'permission':
+      return props.t('errorPermission');
+    case 'unsupported':
+      return props.t('errorUnsupportedHost');
     default:
       return props.t('errorNetwork');
   }
